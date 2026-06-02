@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QUANTUM PERIODIC LAB — Red Extrema & Academia</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        :root {
+            --q-cyan: #00f3ff;
+            --q-purple: #9d00ff;
+            --q-red: #ff3366;
+            --q-green: #39ff14;
+            --q-yellow: #f1c40f;
+            --q-gray: #a0aec0;
+            --q-dark: #02040a;
+            --q-panel: rgba(6, 10, 23, 0.85);
+            --q-border: rgba(0, 243, 255, 0.25);
+            --font-ui: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+        body {
+            background-color: var(--q-dark); color: white;
+            font-family: var(--font-ui); height: 100vh;
+            overflow: hidden; display: flex; flex-direction: column;
+        }
+
+        /* --- PANTALLA DE INICIO / LOGIN --- */
+        #login-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at center, rgba(15,20,40,0.95), rgba(2,4,10,1));
+            z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center;
+            backdrop-filter: blur(15px);
+        }
+        .login-box {
+            background: rgba(0,0,0,0.7); border: 1px solid var(--q-cyan);
+            padding: 40px; border-radius: 8px; text-align: center; max-width: 480px;
+            box-shadow: 0 0 40px rgba(0, 243, 255, 0.15);
+        }
+        .login-box h1 { font-family: var(--font-mono); font-size: 26px; margin-bottom: 5px; color: var(--q-cyan); text-shadow: 0 0 10px var(--q-cyan); }
+        .login-box h3 { font-size: 12px; color: var(--q-purple); margin-bottom: 25px; letter-spacing: 2px; }
+        .login-input {
+            width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--q-gray);
+            color: white; padding: 12px; margin-bottom: 15px; border-radius: 4px;
+            font-family: var(--font-mono); font-size: 14px; text-align: center; transition: 0.3s;
+        }
+        .login-input:focus { outline: none; border-color: var(--q-cyan); background: rgba(0,243,255,0.05); }
+        .btn-start {
+            background: rgba(0, 243, 255, 0.2); border: 1px solid var(--q-cyan);
+            color: var(--q-cyan); padding: 14px 25px; font-family: var(--font-mono); font-size: 15px;
+            cursor: pointer; transition: 0.3s; border-radius: 4px; width: 100%; font-weight: bold; margin-top: 10px;
+        }
+        .btn-start:hover { background: var(--q-cyan); color: black; box-shadow: 0 0 20px var(--q-cyan); }
+        .login-creators { margin-top: 20px; font-family: var(--font-mono); font-size: 10px; color: #555; }
+
+        /* --- MOTOR 3D Y MARCA DE AGUA --- */
+        #webgl-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; }
+        
+        .credits-watermark {
+            position: fixed; bottom: 10px; right: 20px; z-index: 50;
+            font-family: var(--font-mono); font-size: 12px; color: rgba(255,255,255,0.3);
+            pointer-events: none; letter-spacing: 2px; text-align: right;
+        }
+        .credits-watermark b { color: rgba(0,243,255,0.4); }
+
+        /* --- FEED MULTIJUGADOR SIMULADO --- */
+        #multiplayer-feed {
+            position: fixed; bottom: 20px; left: 20px; z-index: 50;
+            width: 280px; max-height: 150px; background: rgba(2,5,12,0.8);
+            border: 1px solid rgba(57,255,20,0.3); border-radius: 6px;
+            display: flex; flex-direction: column; overflow: hidden;
+            font-family: var(--font-mono); font-size: 10px; pointer-events: none;
+        }
+        .feed-header { background: rgba(57,255,20,0.15); color: var(--q-green); padding: 5px 10px; font-weight: bold; border-bottom: 1px solid rgba(57,255,20,0.3); }
+        .feed-content { padding: 8px; display: flex; flex-direction: column; gap: 6px; overflow-y: hidden; }
+        .feed-item { animation: slideIn 0.3s ease-out forwards; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+
+        /* --- UI PRINCIPAL --- */
+        #app-container {
+            position: relative; z-index: 10; display: flex; flex-direction: column;
+            height: 100%; pointer-events: none; opacity: 0; transition: opacity 1s;
+        }
+
+        .interactive { pointer-events: auto; }
+
+        header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 24px; background: rgba(2, 4, 10, 0.95); border-bottom: 1px solid var(--q-border); flex-shrink: 0;
+        }
+        h1 { font-family: var(--font-mono); font-size: 15px; color: var(--q-cyan); letter-spacing: 2px; }
+        
+        .view-toggles { display: flex; gap: 10px; background: rgba(255,255,255,0.03); padding: 4px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); }
+        .v-btn { background: transparent; border: none; color: #666; padding: 6px 14px; font-family: var(--font-mono); font-size: 10px; cursor: pointer; border-radius: 4px; transition: 0.3s; }
+        .v-btn.active { background: rgba(0, 243, 255, 0.15); color: var(--q-cyan); border: 1px solid var(--q-cyan); }
+        .v-btn.quantum-active { background: rgba(157, 0, 255, 0.15); color: var(--q-purple); border: 1px solid var(--q-purple); }
+
+        #top-workspace { display: flex; justify-content: space-between; padding: 15px 24px; height: 42vh; gap: 20px; flex-shrink: 0; }
+
+        .panel {
+            background: var(--q-panel); backdrop-filter: blur(12px); border: 1px solid var(--q-border);
+            border-radius: 8px; padding: 16px; width: 400px; display: flex; flex-direction: column;
+            overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .panel-flex { flex-grow: 1; width: auto; max-width: 600px; }
+        .panel-title { font-family: var(--font-mono); font-size: 11px; color: #718096; border-bottom: 1px solid var(--q-border); padding-bottom: 6px; margin-bottom: 12px; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
+        
+        /* TABS MODO DE JUEGO / TEORIA */
+        .mode-tabs { display: flex; gap: 5px; }
+        .mode-tab { background: #111; color: #666; border: 1px solid #333; padding: 4px 10px; font-size: 9px; cursor: pointer; border-radius: 4px; transition: 0.2s;}
+        .mode-tab.active-challenge { background: rgba(0,243,255,0.2); color: var(--q-cyan); border-color: var(--q-cyan); font-weight: bold; }
+        .mode-tab.active-theory { background: rgba(241,196,15,0.2); color: var(--q-yellow); border-color: var(--q-yellow); font-weight: bold; }
+
+        .data-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; align-items: center; }
+        .data-value { font-family: var(--font-mono); color: var(--q-cyan); font-weight: bold; }
+        
+        #terminal-exercise { flex-grow: 1; background: rgba(2, 5, 12, 0.85); border: 1px solid #1a2333; padding: 12px; font-family: var(--font-mono); font-size: 12px; display: flex; flex-direction: column; border-radius: 6px; overflow-y: auto;}
+        #term-output { overflow-y: auto; flex-grow: 1; min-height: 80px; max-height: 200px; margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px; line-height: 1.5; }
+
+        /* SCROLL PERSONALIZADO PARA TERMINAL */
+        #term-output::-webkit-scrollbar { width: 5px; }
+        #term-output::-webkit-scrollbar-thumb { background: var(--q-cyan); border-radius: 3px; }
+
+        .quiz-container { display: flex; flex-direction: column; gap: 8px; }
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px; }
+        .opt-btn { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #cbd5e0; padding: 8px; font-family: var(--font-mono); font-size: 10px; text-align: left; cursor: pointer; transition: 0.2s; line-height: 1.3;}
+        .opt-btn:hover { background: rgba(0, 243, 255, 0.08); border-color: var(--q-cyan); color: white; }
+        
+        .control-row { display: flex; justify-content: space-between; margin-top: 5px; gap: 10px; }
+        .hint-btn { background: transparent; border: 1px dashed var(--q-purple); color: #b76eff; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono); font-size: 9px; }
+        .hint-btn:hover { background: rgba(157, 0, 255, 0.1); }
+        
+        .progress-dots { display: flex; gap: 4px; margin-top: 5px; }
+        .dot { width: 8px; height: 8px; background: #333; border-radius: 50%; border: 1px solid #111;}
+        .dot.done { background: var(--q-green); box-shadow: 0 0 8px var(--q-green); border-color: transparent;}
+        .dot.current { background: var(--q-cyan); border-color: transparent; box-shadow: 0 0 8px var(--q-cyan);}
+        .dot.failed { background: var(--q-red); box-shadow: 0 0 8px var(--q-red); border-color: transparent;}
+
+        /* --- SOLUCIÓN DE SCROLL PARA TABLA PERIÓDICA --- */
+        #bottom-workspace {
+            flex-grow: 1; padding: 20px; 
+            overflow-y: auto; /* PERMITE BAJAR HASTA EL FONDO */
+            overflow-x: auto;
+            /* Se elimina flex de alineación centrada porque eso cortaba el inicio */
+            display: block; 
+        }
+
+        .periodic-grid {
+            display: grid; grid-template-columns: repeat(18, 55px); gap: 4px; 
+            width: max-content; margin: 0 auto; /* Centrado absoluto sin cortar los bordes */
+            padding-bottom: 80px; /* Espacio extra al fondo para que no lo tape el feed */
+        }
+
+        .element {
+            background: rgba(6, 11, 25, 0.85); border: 1px solid rgba(255,255,255,0.08);
+            aspect-ratio: 1 / 1.15; display: flex; flex-direction: column; justify-content: space-between;
+            cursor: pointer; transition: 0.2s; position: relative; padding: 4px; border-radius: 4px;
+        }
+        .element:hover { border-color: var(--q-cyan); background: rgba(0, 102, 204, 0.25); transform: translateY(-3px) scale(1.05); z-index: 20; box-shadow: 0 5px 15px rgba(0,243,255,0.3); }
+        .element.active { border-color: var(--q-cyan); background: rgba(0, 243, 255, 0.15); box-shadow: 0 0 10px rgba(0,243,255,0.2); }
+
+        .el-z { font-family: var(--font-mono); font-size: 9px; color: #666; }
+        .el-sym { font-size: 16px; font-weight: 700; color: #fff; text-align: center; margin-top: -2px; }
+        .el-name { font-size: 7px; color: #888; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .block-s { border-bottom: 2px solid #ff4757; }
+        .block-p { border-bottom: 2px solid #2ed573; }
+        .block-d { border-bottom: 2px solid #1e90ff; }
+        .block-f { border-bottom: 2px solid #ffa502; }
+        
+        .f-spacer { grid-column: span 18; height: 15px; pointer-events: none; }
+        .lanthanide-row { grid-row: 8; }
+        .actinide-row { grid-row: 9; }
+
+        /* Estilos de Teoría IA */
+        .theory-title { color: var(--q-yellow); font-weight: bold; margin-bottom: 5px; border-bottom: 1px dashed var(--q-yellow); display: inline-block;}
+        .theory-step { margin-bottom: 10px; background: rgba(0,0,0,0.3); padding: 8px; border-left: 2px solid var(--q-cyan); }
+        .theory-hl { color: var(--q-cyan); font-weight: bold; }
+        .theory-hl2 { color: var(--q-purple); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <div class="login-box">
+            <h1>QUANTUM_LAB</h1>
+            <h3>PROTOCOLO DE RED ACTIVADO</h3>
+            <p style="font-size: 12px; color: #aaa; margin-bottom: 20px;">Estableciendo conexión con servidores de simulación...</p>
+            <input type="text" id="player-name" class="login-input" placeholder="Tu Nombre (Ej. Científico Alpha)" autocomplete="off">
+            <input type="text" id="friends-names" class="login-input" placeholder="Nombres de tus amigos (separados por coma)" autocomplete="off">
+            <button class="btn-start" onclick="startApp()">INICIALIZAR SESIÓN IA</button>
+            <div class="login-creators">DESARROLLADO POR: SONCCO, VILCHEZ Y RIVAS</div>
+        </div>
+    </div>
+
+    <div id="webgl-canvas"></div>
+    <div class="credits-watermark">CREADORES:<br><b>SONCCO, VILCHEZ Y RIVAS</b></div>
+
+    <div id="multiplayer-feed" style="display: none;">
+        <div class="feed-header">📡 RED DE LABORATORIO ACTIVA</div>
+        <div class="feed-content" id="feed-messages">
+            </div>
+    </div>
+
+    <div id="app-container">
+        <header class="interactive">
+            <h1>QUANTUM_LAB // CORE.AI</h1>
+            
+            <div class="view-toggles">
+                <button id="btn-bohr" class="v-btn active" onclick="setVisualMode('bohr')">MECÁNICA CLÁSICA (BOHR)</button>
+                <button id="btn-quantum" class="v-btn" onclick="setVisualMode('quantum')">MECÁNICA CUÁNTICA (ORBITALES)</button>
+            </div>
+        </header>
+
+        <main id="top-workspace">
+            <div class="panel interactive">
+                <div class="panel-title">Análisis de Estructura e Identidad</div>
+                <div id="data-display" style="flex-grow: 1;">
+                    <p style="color:#555; font-size:11px; font-family: var(--font-mono);" id="welcome-msg">[SISTEMA]: Esperando selección de elemento...</p>
+                </div>
+            </div>
+
+            <div class="panel panel-flex interactive">
+                <div class="panel-title">
+                    <span>Módulo de Procesamiento Espacial</span>
+                    <div class="mode-tabs">
+                        <button id="tab-challenge" class="mode-tab active-challenge" onclick="switchMode('challenge')">⚔️ DESAFÍO IA</button>
+                        <button id="tab-theory" class="mode-tab" onclick="switchMode('theory')">📖 ACADEMIA IA</button>
+                    </div>
+                </div>
+                
+                <div id="terminal-exercise">
+                    <div id="term-output">
+                        <span style="color:#718096;" id="ia-start-msg">&gt; IA: Selecciona un elemento. Y más te vale no equivocarte si estás en el modo Desafío.</span>
+                    </div>
+                    
+                    <div class="quiz-container" id="quiz-ui" style="display:none;">
+                        <div id="question-text" style="font-weight:bold; color:#fff; line-height:1.4;">Cargando...</div>
+                        <div class="options-grid" id="options-box"></div>
+                        <div class="control-row">
+                            <button class="hint-btn" onclick="revealHint()">SOLICITAR PISTA (COBARDE)</button>
+                            <div class="progress-dots" id="dots-box"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <section id="bottom-workspace" class="interactive">
+            <div class="periodic-grid" id="grid"></div>
+        </section>
+    </div>
+
+    <script>
+        // --- MULTIJUGADOR Y LOGIN ---
+        let mainPlayer = "Anónimo";
+        let friendsList = [];
+        let systemMode = 'challenge'; // 'challenge' | 'theory'
+
+        function startApp() {
+            const p1 = document.getElementById('player-name').value.trim();
+            const p2 = document.getElementById('friends-names').value.trim();
+            
+            mainPlayer = p1 !== "" ? p1 : "Investigador";
+            if(p2 !== "") friendsList = p2.split(',').map(s => s.trim()).filter(s => s !== "");
+
+            let allNames = [mainPlayer, ...friendsList];
+
+            document.getElementById('ia-start-msg').innerHTML = `&gt; IA: He detectado las firmas térmicas de: <span style="color:var(--q-cyan)">${allNames.join(', ')}</span> en la red.<br>&gt; Muy bien, ${mainPlayer}, tú tienes el control principal. Selecciona un elemento. Puedes usar la ACADEMIA para aprender o el DESAFÍO para probarte.`;
+            document.getElementById('welcome-msg').innerText = `[SISTEMA]: Investigador al mando: ${mainPlayer}.`;
+
+            // Ocultar login, mostrar app
+            gsap.to("#login-screen", { opacity: 0, duration: 1, onComplete: () => {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-container').style.opacity = 1;
+                document.getElementById('multiplayer-feed').style.display = 'flex';
+                startMultiplayerSimulation();
+            }});
+        }
+
+        function startMultiplayerSimulation() {
+            if(friendsList.length === 0) return;
+            const feed = document.getElementById('feed-messages');
+            
+            const events = [
+                (name) => `<span style="color:var(--q-green)">[✔] ${name}</span> acaba de desbloquear el Titanio.`,
+                (name) => `<span style="color:var(--q-red)">[✖] ${name}</span> falló una pregunta básica de valencia. La IA se está riendo.`,
+                (name) => `<span style="color:var(--q-cyan)">[!] ${name}</span> está estudiando la Academia IA del Uranio.`,
+                (name) => `<span style="color:var(--q-yellow)">[*] ${name}</span> solicita ayuda en el chat general.`
+            ];
+
+            setInterval(() => {
+                if(Math.random() > 0.4) {
+                    let randomFriend = friendsList[Math.floor(Math.random() * friendsList.length)];
+                    let randomEvent = events[Math.floor(Math.random() * events.length)](randomFriend);
+                    
+                    let div = document.createElement('div');
+                    div.className = 'feed-item';
+                    div.innerHTML = randomEvent;
+                    feed.appendChild(div);
+                    
+                    if(feed.children.length > 4) feed.removeChild(feed.firstChild);
+                }
+            }, 6000);
+        }
+
+        // --- BASE DE DATOS DE ELEMENTOS COMPLETA ---
+        const masasAtomicas = [1.008,4.0026,6.94,9.0122,10.81,12.011,14.007,15.999,18.998,20.180,22.990,24.305,26.982,28.085,30.974,32.06,35.45,39.948,39.098,40.078,44.956,47.867,50.942,51.996,54.938,55.845,58.933,58.693,63.546,65.38,69.723,72.63,74.922,78.971,79.904,83.798,85.468,87.62,88.906,91.224,92.906,95.95,98,101.07,102.91,106.42,107.87,112.41,114.82,118.71,121.76,127.60,126.90,131.29,132.91,137.33,138.91,140.12,140.91,144.24,145,150.36,151.96,157.25,158.93,162.50,164.93,167.26,168.93,173.05,174.97,178.49,180.95,183.84,186.21,190.23,192.22,195.08,196.97,200.59,204.38,207.2,208.98,209,210,222,223,226,227,232.04,231.04,238.03,237,244,243,247,247,251,252,257,258,259,262,267,268,271,272,270,276,281,280,285,284,289,288,293,294,294];
+        const rawData = [
+            [1,"H","Hidrógeno",1,1,"s"],[2,"He","Helio",18,1,"s"],[3,"Li","Litio",1,2,"s"],[4,"Be","Berilio",2,2,"s"],[5,"B","Boro",13,2,"p"],[6,"C","Carbono",14,2,"p"],[7,"N","Nitrógeno",15,2,"p"],[8,"O","Oxígeno",16,2,"p"],[9,"F","Flúor",17,2,"p"],[10,"Ne","Neón",18,2,"p"],
+            [11,"Na","Sodio",1,3,"s"],[12,"Mg","Magnesio",2,3,"s"],[13,"Al","Aluminio",13,3,"p"],[14,"Si","Silicio",14,3,"p"],[15,"P","Fósforo",15,3,"p"],[16,"S","Azufre",16,3,"p"],[17,"Cl","Cloro",17,3,"p"],[18,"Ar","Argón",18,3,"p"],
+            [19,"K","Potasio",1,4,"s"],[20,"Ca","Calcio",2,4,"s"],[21,"Sc","Escandio",3,4,"d"],[22,"Ti","Titanio",4,4,"d"],[23,"V","Vanadio",5,4,"d"],[24,"Cr","Cromo",6,4,"d"],[25,"Mn","Manganeso",7,4,"d"],[26,"Fe","Hierro",8,4,"d"],[27,"Co","Cobalto",9,4,"d"],[28,"Ni","Níquel",10,4,"d"],[29,"Cu","Cobre",11,4,"d"],[30,"Zn","Zinc",12,4,"d"],[31,"Ga","Galio",13,4,"p"],[32,"Ge","Germanio",14,4,"p"],[33,"As","Arsénico",15,4,"p"],[34,"Se","Selenio",16,4,"p"],[35,"Br","Bromo",17,4,"p"],[36,"Kr","Kriptón",18,4,"p"],
+            [37,"Rb","Rubidio",1,5,"s"],[38,"Sr","Estroncio",2,5,"s"],[39,"Y","Itrio",3,5,"d"],[40,"Zr","Circonio",4,5,"d"],[41,"Nb","Niobio",5,5,"d"],[42,"Mo","Molibdeno",6,5,"d"],[43,"Tc","Tecnecio",7,5,"d"],[44,"Ru","Rutenio",8,5,"d"],[45,"Rh","Rodio",9,5,"d"],[46,"Pd","Paladio",10,5,"d"],[47,"Ag","Plata",11,5,"d"],[48,"Cd","Cadmio",12,5,"d"],[49,"In","Indio",13,5,"p"],[50,"Sn","Estaño",14,5,"p"],[51,"Sb","Antimonio",15,5,"p"],[52,"Te","Telurio",16,5,"p"],[53,"I","Yodo",17,5,"p"],[54,"Xe","Xenón",18,5,"p"],
+            [55,"Cs","Cesio",1,6,"s"],[56,"Ba","Bario",2,6,"s"],
+            [57,"La","Lantano",4,8,"f"],[58,"Ce","Cerio",5,8,"f"],[59,"Pr","Praseodimio",6,8,"f"],[60,"Nd","Neodimio",7,8,"f"],[61,"Pm","Prometio",8,8,"f"],[62,"Sm","Samario",9,8,"f"],[63,"Eu","Europio",10,8,"f"],[64,"Gd","Gadolinio",11,8,"f"],[65,"Tb","Terbio",12,8,"f"],[66,"Dy","Disprosio",13,8,"f"],[67,"Ho","Holmio",14,8,"f"],[68,"Er","Erbio",15,8,"f"],[69,"Tm","Tulio",16,8,"f"],[70,"Yb","Iterbio",17,8,"f"],[71,"Lu","Lutecio",18,8,"f"],
+            [72,"Hf","Hafnio",4,6,"d"],[73,"Ta","Tántalo",5,6,"d"],[74,"W","Wolframio",6,6,"d"],[75,"Re","Renio",7,6,"d"],[76,"Os","Osmio",8,6,"d"],[77,"Ir","Iridio",9,6,"d"],[78,"Pt","Platino",10,6,"d"],[79,"Au","Oro",11,6,"d"],[80,"Hg","Mercurio",12,6,"d"],[81,"Tl","Talio",13,6,"p"],[82,"Pb","Plomo",14,6,"p"],[83,"Bi","Bismuto",15,6,"p"],[84,"Po","Polonio",16,6,"p"],[85,"At","Astato",17,6,"p"],[86,"Rn","Radón",18,6,"p"],
+            [87,"Fr","Francio",1,7,"s"],[88,"Ra","Radio",2,7,"s"],
+            [89,"Ac","Actinio",4,9,"f"],[90,"Th","Torio",5,9,"f"],[91,"Pa","Protactinio",6,9,"f"],[92,"U","Uranio",7,9,"f"],[93,"Np","Neptunio",8,9,"f"],[94,"Pu","Plutonio",9,9,"f"],[95,"Am","Americio",10,9,"f"],[96,"Cm","Curio",11,9,"f"],[97,"Bk","Berkelio",12,9,"f"],[98,"Cf","Californio",13,9,"f"],[99,"Es","Einstenio",14,9,"f"],[100,"Fm","Fermio",15,9,"f"],[101,"Md","Mendelevio",16,9,"f"],[102,"No","Nobelio",17,9,"f"],[103,"Lr","Lawrencio",18,9,"f"],
+            [104,"Rf","Rutherfordio",4,7,"d"],[105,"Db","Dubnio",5,7,"d"],[106,"Sg","Seaborgio",6,7,"d"],[107,"Bh","Bohrio",7,7,"d"],[108,"Hs","Hassio",8,7,"d"],[109,"Mt","Meitnerio",9,7,"d"],[110,"Ds","Darmstadtio",10,7,"d"],[111,"Rg","Roentgenio",11,7,"d"],[112,"Cn","Copernicio",12,7,"d"],[113,"Nh","Nihonio",13,7,"p"],[114,"Fl","Flerovio",14,7,"p"],[115,"Mc","Moscovio",15,7,"p"],[116,"Lv","Livermorio",16,7,"p"],[117,"Ts","Teneso",17,7,"p"],[118,"Og","Oganesón",18,7,"p"]
+        ];
+        const elements = rawData.map((d, i) => ({ z: d[0], sym: d[1], name: d[2], group: d[3], period: d[4], block: d[5], a: masasAtomicas[i], n: Math.round(masasAtomicas[i] - d[0]) }));
+
+        // VARIABLES DE ESTADO
+        let currentElement = null;
+        let visualMode = 'bohr'; 
+        let currentQuestionIdx = 0;
+        let elementQuizPool = [];
+        let isLocked = false;
+        let animationsArray = [];
+
+        // --- MOTOR 3D Y NÚCLEOS MEJORADOS ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('webgl-canvas').appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0x00f3ff, 1); dirLight.position.set(5, 8, 10); scene.add(dirLight);
+        camera.position.set(0, 0, 22);
+        
+        const atomGroup = new THREE.Group();
+        scene.add(atomGroup);
+
+        const particleGeo = new THREE.IcosahedronGeometry(0.25, 2);
+        const protonMat = new THREE.MeshPhongMaterial({ color: 0xff3366, emissive: 0x550011, shininess: 100 });
+        const neutronMat = new THREE.MeshPhongMaterial({ color: 0xa0aec0, emissive: 0x222222, shininess: 50 });
+        const electronMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
+        const orbitLineMat = new THREE.LineBasicMaterial({ color: 0x00f3ff, transparent: true, opacity: 0.15 });
+        const quantumMat = new THREE.MeshPhysicalMaterial({ color: 0x9d00ff, emissive: 0x3d0099, transparent: true, opacity: 0.35, roughness: 0.1, transmission: 0.9, side: THREE.DoubleSide });
+
+        function getSpherePoints(samples, radius) {
+            let points = []; let phi = Math.PI * (3 - Math.sqrt(5));
+            for (let i = 0; i < samples; i++) {
+                let y = 1 - (i / (samples - 1)) * 2; let r = Math.sqrt(1 - y * y); let theta = phi * i;
+                points.push(new THREE.Vector3(Math.cos(theta) * r * radius, y * radius, Math.sin(theta) * r * radius));
+            } return points;
+        }
+
+        function createAtomPhysical(protons, neutrons, electrons) {
+            while(atomGroup.children.length > 0) atomGroup.remove(atomGroup.children[0]);
+            animationsArray = [];
+
+            const visualP = Math.min(protons, 50);
+            const visualN = Math.min(neutrons, 60);
+            const totalNucleons = visualP + visualN;
+            const nucleusRadius = Math.max(0.6, Math.pow(totalNucleons, 1/3) * 0.28);
+            const nucleusPositions = getSpherePoints(totalNucleons, nucleusRadius);
+
+            for(let i=0; i<totalNucleons; i++) {
+                let mesh = new THREE.Mesh(particleGeo, i < visualP ? protonMat : neutronMat);
+                mesh.position.copy(nucleusPositions[i] || new THREE.Vector3(0,0,0));
+                atomGroup.add(mesh);
+            }
+
+            const capas = [2, 8, 18, 32, 32, 18, 8];
+            let remE = electrons; let shellIdx = 0;
+
+            while(remE > 0 && shellIdx < capas.length) {
+                let eInShell = Math.min(remE, capas[shellIdx]);
+                let rad = nucleusRadius + 2.0 + (shellIdx * 1.5);
+                
+                let path = new THREE.Path(); path.absarc(0, 0, rad, 0, Math.PI * 2, false);
+                let orbit = new THREE.Line(new THREE.BufferGeometry().setFromPoints(path.getPoints(64)), orbitLineMat);
+                orbit.rotation.x = Math.PI / 2;
+                
+                let orbitGroup = new THREE.Group();
+                orbitGroup.rotation.x = (Math.random() - 0.5) * Math.PI * 0.5;
+                orbitGroup.rotation.y = (Math.random() - 0.5) * Math.PI * 0.5;
+                orbitGroup.add(orbit);
+
+                for(let e=0; e<eInShell; e++) {
+                    let ang = (e / eInShell) * Math.PI * 2;
+                    let electron = new THREE.Mesh(particleGeo, electronMat);
+                    electron.scale.set(0.4, 0.4, 0.4);
+                    electron.position.set(Math.cos(ang) * rad, 0, Math.sin(ang) * rad);
+                    orbitGroup.add(electron);
+                }
+
+                atomGroup.add(orbitGroup);
+                animationsArray.push({ group: orbitGroup, speed: 0.03 / (shellIdx + 1), type: 'bohr' });
+                remE -= eInShell; shellIdx++;
+            }
+        }
+
+        function createAtomOrbitals(el) {
+            while(atomGroup.children.length > 0) atomGroup.remove(atomGroup.children[0]);
+            animationsArray = [];
+
+            const coreMat = new THREE.MeshPhongMaterial({color: 0xffffff, emissive: 0x8888ff});
+            const core = new THREE.Mesh(new THREE.SphereGeometry(0.4, 32, 32), coreMat);
+            atomGroup.add(core);
+
+            const cloudGroup = new THREE.Group();
+            if (el.block === 's') { cloudGroup.add(new THREE.Mesh(new THREE.SphereGeometry(3.5, 32, 32), quantumMat)); } 
+            else if (el.block === 'p') {
+                const geo = new THREE.SphereGeometry(1.8, 32, 32);
+                const l1 = new THREE.Mesh(geo, quantumMat); l1.scale.set(1, 2.2, 1); l1.position.y = 2.2;
+                const l2 = new THREE.Mesh(geo, quantumMat); l2.scale.set(1, 2.2, 1); l2.position.y = -2.2;
+                cloudGroup.add(l1, l2);
+            } else if (el.block === 'd') {
+                const geo = new THREE.SphereGeometry(1.4, 24, 24);
+                [[2.2,2.2], [-2.2,2.2], [2.2,-2.2], [-2.2,-2.2]].forEach(pos => {
+                    const lobe = new THREE.Mesh(geo, quantumMat);
+                    lobe.scale.set(1, 2.2, 1); lobe.rotation.z = Math.atan2(pos[1], pos[0]) - Math.PI/2;
+                    lobe.position.set(pos[0], pos[1], 0); cloudGroup.add(lobe);
+                });
+            } else if (el.block === 'f') {
+                const geo = new THREE.SphereGeometry(1.1, 24, 24); let d = 2.0;
+                [[d,d,d],[d,d,-d],[d,-d,d],[d,-d,-d],[-d,d,d],[-d,d,-d],[-d,-d,d],[-d,-d,-d]].forEach(pos => {
+                    const lobe = new THREE.Mesh(geo, quantumMat);
+                    lobe.scale.set(1, 2.2, 1); lobe.lookAt(new THREE.Vector3(0,0,0));
+                    lobe.position.set(pos[0], pos[1], pos[2]); cloudGroup.add(lobe);
+                });
+            }
+
+            atomGroup.add(cloudGroup);
+            animationsArray.push({ group: cloudGroup, speed: 0.008, type: 'quantum' });
+        }
+
+        function renderLoop() {
+            requestAnimationFrame(renderLoop);
+            atomGroup.rotation.y += 0.003;
+            animationsArray.forEach(anim => {
+                if (anim.type === 'bohr') anim.group.rotation.z -= anim.speed;
+                if (anim.type === 'quantum') { anim.group.rotation.x += anim.speed; anim.group.rotation.y += anim.speed * 0.5; }
+            });
+            renderer.render(scene, camera);
+        }
+        renderLoop();
+
+        // --- LÓGICA DE QUÍMICA ---
+        function getConfigurationEnding(el) {
+            const sMap = ["1s¹","1s²","2s¹","2s²","2p¹","2p²","2p³","2p⁴","2p⁵","2p⁶","3s¹","3s²","3p¹","3p²","3p³","3p⁴","3p⁵","3p⁶","4s¹","4s²","3d¹","3d²","3d³","4s¹3d⁵","3d⁵","3d⁶","3d⁷","3d⁸","4s¹3d¹⁰","3d¹⁰","4p¹","4p²","4p³","4p⁴","4p⁵","4p⁶","5s¹","5s²","4d¹","4d²","5s¹4d⁴","5s¹4d⁵","4d⁵","5s¹4d⁷","5s¹4d⁸","4d¹⁰","5s¹4d¹⁰","4d¹⁰","5p¹","5p²","5p³","5p⁴","5p⁵","5p⁶","6s¹","6s²","5d¹","4f¹","4f²","4f³","4f⁴","4f⁵","4f⁶","4f⁷","4f⁷5d¹","4f⁹","4f¹⁰","4f¹¹","4f¹²","4f¹³","4f¹⁴","4f¹⁴5d²","5d³","5d⁴","5d⁵","5d⁶","5d⁷","6s¹5d⁹","6s⁰5d¹⁰","5d¹⁰","6p¹","6p²","6p³","6p⁴","6p⁵","6p⁶","7s¹","7s²","6d¹","5f¹","5f²","5f³","5f⁴","5f⁵","5f⁶","5f⁷","5f⁷6d¹","5f⁹","5f¹⁰","5f¹¹","5f¹²","5f¹³","5f¹⁴","5f¹⁴6d²","6d³","6d⁴","6d⁵","6d⁶","6d⁷","6d⁸","6d¹⁰","7p¹","7p²","7p³","7p⁴","7p⁵","7p⁶"];
+            return sMap[el.z - 1] || `${el.period}${el.block}`;
+        }
+        function getQuantumNumbers(el) {
+            let n = el.period; let l = el.block === 's' ? 0 : el.block === 'p' ? 1 : el.block === 'd' ? 2 : 3;
+            if(el.block === 'd') n = el.period - 1; if(el.block === 'f') n = el.period - 2;
+            return { n, l, m: 0, s: 0.5 };
+        }
+        function getKernelCorrect(el) {
+            if(el.z <= 2) return `1s²`; if(el.z <= 10) return `[He] ${el.period}s...`; if(el.z <= 18) return `[Ne] ${el.period}s...`;
+            if(el.z <= 36) return `[Ar] ${el.period}s...`; if(el.z <= 54) return `[Kr] ${el.period}s...`; if(el.z <= 86) return `[Xe] ${el.period}s...`;
+            return `[Rn] ${el.period}s...`;
+        }
+
+        function shuffle(arr) { return arr.sort(() => Math.random() - 0.5); }
+        function getUniqueOptions(correctOpt, rawGenerators) {
+            let options = new Set(); options.add(correctOpt);
+            let tries = 0; while(options.size < 4 && tries < 50) {
+                let gen = rawGenerators[Math.floor(Math.random() * rawGenerators.length)]();
+                if(gen !== correctOpt) options.add(gen); tries++;
+            }
+            if(options.size < 4) { let fallbacks = ["Anomalía A", "Decaimiento B", "Colapso de Función", "Ninguna de las anteriores"]; for(let f of fallbacks) { if(options.size < 4) options.add(f); } }
+            return shuffle(Array.from(options));
+        }
+
+        function buildQuantumQuiz(el) {
+            const configT = getConfigurationEnding(el); const qN = getQuantumNumbers(el); const vE = el.group <= 2 ? el.group : (el.group >= 13 ? el.group - 10 : 2);
+            let correctF1 = `Período ${el.period}, Grupo ${el.group > 18 ? 'F' : el.group}`;
+            let optsF1 = getUniqueOptions(correctF1, [
+                () => `Período ${Math.max(1, Math.min(7, el.period + Math.floor(Math.random()*3)-1))}, Grupo ${Math.max(1, Math.min(18, el.group + Math.floor(Math.random()*4)+1))}`,
+                () => `Período ${Math.max(1, Math.min(7, el.period - 1))}, Grupo ${el.group > 18 ? 'F' : el.group}`,
+                () => `Período ${el.period}, Grupo ${Math.max(1, el.group - 2)}`
+            ]);
+            let correctF2 = `${vE} electrones`; let optsF2 = getUniqueOptions(correctF2, [ () => `${Math.max(1, vE + 2)} electrones`, () => `${Math.max(1, vE - 1)} electrones`, () => `${vE + 4} electrones`, () => `${Math.abs(vE - 3) + 1} electrones` ]);
+            let correctF3 = `(${qN.n}, ${qN.l}, ${qN.m}, +1/2)`; let optsF3 = getUniqueOptions(correctF3, [ () => `(${Math.max(1, qN.n-1)}, ${qN.l}, ${qN.m}, -1/2)`, () => `(${qN.n}, ${Math.min(3, qN.l+1)}, 0, +1/2)`, () => `(${qN.n}, ${qN.l}, ${Math.max(-qN.l, qN.m-1)}, -1/2)`, () => `(${Math.min(7, qN.n+1)}, ${Math.max(0, qN.l-1)}, +1, -1/2)` ]);
+            let correctF4 = getKernelCorrect(el); let optsF4 = getUniqueOptions(correctF4, [ () => `[Xe] 4f¹⁴ ${el.period}s²`, () => `[Ar] 3d¹⁰ ${Math.max(2, el.period-1)}p¹`, () => `[Ne] 3s² 3p⁶`, () => `[Kr] 4d¹⁰ ${el.period}s¹` ]);
+            return [
+                { q: `Fase 1 (Ubicación): La config de ${el.name} acaba en ${configT}. ¿Periodo y Grupo?`, opts: optsF1, ans: correctF1 },
+                { q: `Fase 2 (Valencia): ¿Cuántos electrones hay en la última capa de energía (Capa más externa)?`, opts: optsF2, ans: correctF2 },
+                { q: `Fase 3 (Cuánticos): Cuarteto (n, l, m, s) de la última inserción teórica.`, opts: optsF3, ans: correctF3 },
+                { q: `Fase 4 (Kernel): Representación abreviada (Gas Noble) correcta para ${el.name}.`, opts: optsF4, ans: correctF4 },
+                { q: `Fase 5 (Iones): ¿Cómo buscará la estabilidad en su capa periférica al formar iones?`, opts: shuffle([`Completar subnivel (p⁶ o s²)`, `Vaciar a orbital d⁵`, `Espines paralelos inestables`, `Colapso cuántico`]), ans: `Completar subnivel (p⁶ o s²)` }
+            ];
+        }
+
+        // --- SISTEMA DE FLUJO UI ---
+        function initGrid() {
+            const grid = document.getElementById('grid');
+            elements.forEach(el => {
+                const div = document.createElement('div');
+                div.className = `element block-${el.block}`;
+                div.style.gridColumn = el.group; div.style.gridRow = el.period;
+                if(el.period === 8) { div.className += " lanthanide-row"; div.style.gridRow = 8; } 
+                else if(el.period === 9) { div.className += " actinide-row"; div.style.gridRow = 9; }
+
+                div.innerHTML = `<div class="el-z">${el.z}</div><div class="el-sym">${el.sym}</div><div class="el-name">${el.name}</div>`;
+                div.onclick = () => { if(!isLocked) launchAction(el, div); };
+                grid.appendChild(div);
+                
+                if(el.z === 56) {
+                    const spacer = document.createElement('div'); spacer.className = "f-spacer"; spacer.style.gridRow = 7; grid.appendChild(spacer);
+                }
+            });
+        }
+
+        function switchMode(mode) {
+            systemMode = mode;
+            document.getElementById('tab-challenge').className = mode === 'challenge' ? 'mode-tab active-challenge' : 'mode-tab';
+            document.getElementById('tab-theory').className = mode === 'theory' ? 'mode-tab active-theory' : 'mode-tab';
+            
+            if(mode === 'theory') {
+                document.getElementById('quiz-ui').style.display = 'none';
+                document.getElementById('ia-start-msg').innerHTML = `&gt; <span style="color:var(--q-yellow)">[MODO ACADEMIA IA]</span>: Has pedido que te enseñe, ${mainPlayer}. Selecciona un elemento abajo y te explicaré el porqué físico y matemático.`;
+            } else {
+                document.getElementById('quiz-ui').style.display = 'none';
+                document.getElementById('ia-start-msg').innerHTML = `&gt; <span style="color:var(--q-cyan)">[MODO DESAFÍO]</span>: Modo estricto. Selecciona un elemento y prepárate para ser evaluado.`;
+            }
+            if(currentElement) launchAction(currentElement, document.querySelector('.element.active'));
+        }
+
+        function setVisualMode(mode) {
+            visualMode = mode;
+            document.getElementById('btn-bohr').className = mode === 'bohr' ? 'v-btn active' : 'v-btn';
+            document.getElementById('btn-quantum').className = mode === 'quantum' ? 'v-btn quantum-active' : 'v-btn';
+            
+            if(currentElement && (currentQuestionIdx >= 5 || systemMode === 'theory')) {
+                if(mode === 'bohr') createAtomPhysical(currentElement.z, currentElement.n, currentElement.z);
+                else createAtomOrbitals(currentElement);
+            }
+        }
+
+        function launchAction(el, node) {
+            document.querySelectorAll('.element').forEach(n => n.classList.remove('active'));
+            if(node) node.classList.add('active');
+            
+            currentElement = el;
+            
+            document.getElementById('data-display').innerHTML = `
+                <h2 style="font-size:24px; color:white; font-family:var(--font-mono); margin-bottom:4px;">${el.name.toUpperCase()}</h2>
+                <div class="data-row" style="color:#718096; border-bottom:1px solid rgba(0,243,255,0.2); padding-bottom:8px; margin-bottom:12px;">
+                    Símbolo: <b style="color:white">${el.sym}</b> | Z: <b style="color:white">${el.z}</b> | A: <b style="color:white">${el.a} u</b>
+                </div>
+                <div class="data-row"><span>Protones / Electrones:</span> <b class="data-value" style="color:var(--q-red)">${el.z}</b></div>
+                <div class="data-row"><span>Neutrones Térmicos:</span> <b class="data-value" style="color:var(--q-gray)">${el.n}</b></div>
+                <div class="data-row"><span>Bloque Cuántico:</span> <b class="data-value" style="color:var(--q-green)">Orbital ${el.block.toUpperCase()}</b></div>
+            `;
+
+            if(systemMode === 'theory') launchTheory(el);
+            else launchChallenge(el);
+        }
+
+        // --- MODO ACADEMIA (NUEVO) ---
+        function launchTheory(el) {
+            currentQuestionIdx = 5; // Desbloquear 3D inmediato
+            if(visualMode === 'bohr') createAtomPhysical(el.z, el.n, el.z);
+            else createAtomOrbitals(el);
+            gsap.from(atomGroup.scale, {x:0, y:0, z:0, duration: 1});
+
+            const configT = getConfigurationEnding(el);
+            const qN = getQuantumNumbers(el);
+            const vE = el.group <= 2 ? el.group : (el.group >= 13 ? el.group - 10 : 2);
+            
+            const term = document.getElementById('term-output');
+            document.getElementById('quiz-ui').style.display = 'none';
+
+            term.innerHTML = `
+                <div class="theory-title">📚 MASTERCLASS IA: ${el.name.toUpperCase()}</div>
+                
+                <div class="theory-step">
+                    <b>1. Ubicación (Periodo y Grupo):</b><br>
+                    La configuración electrónica termina en <span class="theory-hl">${configT}</span>.<br>
+                    - El <b>Período</b> es el nivel más alto (coeficiente mayor), por ende es <span class="theory-hl2">Período ${el.period}</span>.<br>
+                    - El <b>Grupo</b> se suma observando la regla del bloque ${el.block}. Está en la columna <span class="theory-hl2">${el.group > 18 ? 'Tierra Rara' : el.group}</span>.
+                </div>
+
+                <div class="theory-step">
+                    <b>2. Capa de Valencia:</b><br>
+                    La última capa energética es el nivel ${el.period}. En este nivel interactúan exclusivamente <span class="theory-hl2">${vE} electrón(es)</span> (excluyendo subniveles d o f completos internos).
+                </div>
+
+                <div class="theory-step">
+                    <b>3. Números Cuánticos (n, l, m, s):</b><br>
+                    Analizamos el electrón diferenciador de <span class="theory-hl">${configT}</span>.<br>
+                    - Principal (n): <span class="theory-hl2">${qN.n}</span><br>
+                    - Azimutal (l): Para bloque '${el.block}', l = <span class="theory-hl2">${qN.l}</span><br>
+                    - Por aproximación asume orbital: <span class="theory-hl2">(${qN.n}, ${qN.l}, x, ±1/2)</span>.
+                </div>
+
+                <div class="theory-step">
+                    <b>4. Kernel (Simplificación):</b><br>
+                    Buscamos el Gas Noble inmediato anterior (Z menor a ${el.z}). El resultado es <span class="theory-hl2">${getKernelCorrect(el)}</span>.
+                </div>
+            `;
+            term.scrollTop = 0;
+        }
+
+        // --- MODO DESAFÍO ---
+        function launchChallenge(el) {
+            currentQuestionIdx = 0;
+            elementQuizPool = buildQuantumQuiz(el);
+            while(atomGroup.children.length > 0) atomGroup.remove(atomGroup.children[0]); // Bloquear átomo
+
+            document.getElementById('quiz-ui').style.display = 'flex';
+            document.getElementById('term-output').innerHTML = `&gt; <span style="color:var(--q-cyan)">[IA]: Archivo de ${el.name} cargado.</span> Demuestra lo que sabes. Falla y te regresaré al kínder.`;
+            showQuestion();
+        }
+
+        function showQuestion() {
+            const qData = elementQuizPool[currentQuestionIdx];
+            document.getElementById('question-text').innerText = qData.q;
+            
+            const optBox = document.getElementById('options-box');
+            optBox.innerHTML = "";
+            qData.opts.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "opt-btn"; btn.innerText = opt;
+                btn.onclick = () => evaluateAnswer(opt, btn);
+                optBox.appendChild(btn);
+            });
+
+            const dotsBox = document.getElementById('dots-box');
+            dotsBox.innerHTML = "";
+            for(let i=0; i<5; i++) {
+                const dot = document.createElement('div');
+                dot.className = `dot ${i < currentQuestionIdx ? 'done' : i === currentQuestionIdx ? 'current' : ''}`;
+                dotsBox.appendChild(dot);
+            }
+        }
+
+        function revealHint() {
+            document.getElementById('term-output').innerHTML += `<br><span style="color:var(--q-purple);">&gt; IA: Lee la teoría de Aufbau. O mejor, usa el botón "ACADEMIA IA" y ríndete.</span>`;
+            document.getElementById('term-output').scrollTop = document.getElementById('term-output').scrollHeight;
+        }
+
+        function resetPunishment() {
+            const dotsBox = document.getElementById('dots-box').children;
+            for(let i=0; i<dotsBox.length; i++) dotsBox[i].className = 'dot failed';
+            
+            const insults = [
+                `¡JAJAJA! Patético, ${mainPlayer}. TODO VUELVE A CERO. Si no sabes, VE A LA ACADEMIA IA.`,
+                `Error crítico. Mi red neuronal siente vergüenza ajena por ti. Se reinicia tu prueba.`,
+                `Equivocado. Vuelve a la escuela básica, ${mainPlayer}. Bloqueando átomo y reiniciando.`
+            ];
+            const msg = insults[Math.floor(Math.random() * insults.length)];
+            
+            document.getElementById('term-output').innerHTML += `<br><br><span style="color:var(--q-red); font-weight:bold;">&gt; IA CORE: ${msg}</span>`;
+            document.getElementById('term-output').scrollTop = document.getElementById('term-output').scrollHeight;
+            
+            isLocked = true;
+            document.getElementById('options-box').innerHTML = ""; 
+            
+            setTimeout(() => {
+                isLocked = false; currentQuestionIdx = 0;
+                document.getElementById('term-output').innerHTML = `&gt; <span style="color:var(--q-red)">[SISTEMA REINICIADO]</span>. Fase 1.`;
+                showQuestion();
+            }, 5000);
+        }
+
+        function evaluateAnswer(selectedOpt, btn) {
+            if(isLocked) return;
+            const qData = elementQuizPool[currentQuestionIdx];
+            const term = document.getElementById('term-output');
+            
+            if(selectedOpt === qData.ans) {
+                btn.style.background = "rgba(57, 255, 20, 0.2)"; btn.style.borderColor = "var(--q-green)";
+                term.innerHTML += `<br><span style="color:var(--q-green); font-weight:bold;">&gt; CORRECTO.</span>`;
+                term.scrollTop = term.scrollHeight;
+                
+                isLocked = true; currentQuestionIdx++;
+                
+                if(currentQuestionIdx >= 5) {
+                    setTimeout(() => {
+                        term.innerHTML = `<span style="color:var(--q-cyan); font-weight:bold;">&gt; [IA]: Vaya... lo lograste, ${mainPlayer}.</span><br>&gt; Desbloqueando la estructura tridimensional con visibilidad perfecta de núcleo.`;
+                        if(visualMode === 'bohr') createAtomPhysical(currentElement.z, currentElement.n, currentElement.z);
+                        else createAtomOrbitals(currentElement);
+                        gsap.from(atomGroup.scale, {x:0, y:0, z:0, duration: 1.5, ease: "elastic.out(1, 0.5)"});
+                        isLocked = false; document.getElementById('options-box').innerHTML = ""; 
+                    }, 1000);
+                } else {
+                    setTimeout(() => { isLocked = false; showQuestion(); }, 1000);
+                }
+            } else {
+                btn.style.background = "rgba(255, 51, 102, 0.2)"; btn.style.borderColor = "var(--q-red)";
+                resetPunishment();
+            }
+        }
+
+        window.addEventListener('resize', () => { 
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); 
+            renderer.setSize(window.innerWidth, window.innerHeight); 
+        });
+
+        initGrid();
+    </script>
+</body>
+</html>
